@@ -1,5 +1,14 @@
 import { useState, useCallback, useRef } from "react";
-import { RiUploadCloud2Line, RiFilePdf2Line } from "@remixicon/react";
+import { RiUploadCloud2Line, RiFileTextLine } from "@remixicon/react";
+
+const ACCEPTED_TYPES = new Set(["application/pdf", "text/plain", "application/epub+zip"]);
+const ACCEPTED_EXTENSIONS = [".pdf", ".txt", ".epub"];
+
+function isAcceptedFile(file: File): boolean {
+  if (ACCEPTED_TYPES.has(file.type)) return true;
+  const name = file.name.toLowerCase();
+  return ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext));
+}
 
 interface UploadZoneProps {
   onFileSelect: (file: File) => void;
@@ -25,7 +34,7 @@ export function UploadZone({ onFileSelect, loading }: UploadZoneProps) {
       e.preventDefault();
       setDragging(false);
       const file = e.dataTransfer.files[0];
-      if (file?.type === "application/pdf") {
+      if (file && isAcceptedFile(file)) {
         onFileSelect(file);
       }
     },
@@ -68,7 +77,7 @@ export function UploadZone({ onFileSelect, loading }: UploadZoneProps) {
       <input
         ref={inputRef}
         type="file"
-        accept="application/pdf"
+        accept="application/pdf,.txt,text/plain,.epub,application/epub+zip"
         onChange={handleChange}
         className="hidden"
       />
@@ -76,20 +85,20 @@ export function UploadZone({ onFileSelect, loading }: UploadZoneProps) {
       {loading ? (
         <>
           <div className="size-12 rounded-full border-3 border-primary/30 border-t-primary animate-spin" />
-          <p className="text-muted-foreground text-sm">Processing PDF...</p>
+          <p className="text-muted-foreground text-sm">Processing...</p>
         </>
       ) : (
         <>
           <div className="size-16 rounded-2xl bg-primary/10 flex items-center justify-center">
             {dragging ? (
-              <RiFilePdf2Line className="size-8 text-primary" />
+              <RiFileTextLine className="size-8 text-primary" />
             ) : (
               <RiUploadCloud2Line className="size-8 text-primary" />
             )}
           </div>
           <div className="text-center">
             <p className="font-medium text-foreground">
-              {dragging ? "Drop your PDF here" : "Upload a PDF to start reading"}
+              {dragging ? "Drop your file here" : "Upload a PDF, ePub, or text file"}
             </p>
             <p className="text-sm text-muted-foreground mt-1">
               Drag & drop or click to browse

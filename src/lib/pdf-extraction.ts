@@ -12,16 +12,16 @@ export interface PdfExtractionResult {
 }
 
 export async function extractPdfWithPositions(
-  file: File
+  buffer: ArrayBuffer
 ): Promise<PdfExtractionResult> {
-  const buffer = await file.arrayBuffer();
   const pdf = await getDocument({ data: buffer.slice(0) }).promise;
 
   const allWords: PdfWord[] = [];
   const pageWordRanges: PageWordRange[] = [];
   const pageTexts: string[] = [];
 
-  for (let pageIdx = 0; pageIdx < pdf.numPages; pageIdx++) {
+  const numPages = pdf.numPages;
+  for (let pageIdx = 0; pageIdx < numPages; pageIdx++) {
     const page = await pdf.getPage(pageIdx + 1); // pdfjs is 1-indexed
     const content = await page.getTextContent();
     const startWordIndex = allWords.length;
@@ -81,5 +81,5 @@ export async function extractPdfWithPositions(
 
   const text = pageTexts.join(" ").replace(/\s+/g, " ").trim();
 
-  return { text, words: allWords, pageWordRanges, numPages: pdf.numPages };
+  return { text, words: allWords, pageWordRanges, numPages };
 }

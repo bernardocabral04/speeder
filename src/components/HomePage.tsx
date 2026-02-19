@@ -24,23 +24,59 @@ export function HomePage({ onOpenDocument, dark, onToggleDark }: HomePageProps) 
       setLoading(true);
       setError(null);
       try {
-        const pdfBytes = await file.arrayBuffer();
-        const result = await extractPdfWithPositions(file);
-        if (!result.text.trim()) {
-          setError("Could not extract text from this PDF.");
+        const name = file.name.toLowerCase();
+        const isPdf =
+          file.type === "application/pdf" || name.endsWith(".pdf");
+        const isEpub =
+          file.type === "application/epub+zip" || name.endsWith(".epub");
+
+        let text: string;
+
+        if (isPdf) {
+          const pdfBytes = await file.arrayBuffer();
+          const result = await extractPdfWithPositions(pdfBytes);
+          if (!result.text.trim()) {
+            setError("Could not extract text from this PDF.");
+            return;
+          }
+          const doc = add(file.name, result.text, { hasPdfData: true });
+          await savePdfData({
+            documentId: doc.id,
+            pdfBytes,
+            words: result.words,
+            pageWordRanges: result.pageWordRanges,
+            numPages: result.numPages,
+          });
+          onOpenDocument(doc.id);
+          return;
+        } else if (isEpub) {
+          const { extractEpub } = await import("@/lib/epub-extraction");
+          const { saveEpubData } = await import("@/lib/epub-store");
+          const result = await extractEpub(await file.arrayBuffer());
+          if (!result.text.trim()) {
+            setError("Could not extract text from this ePub.");
+            return;
+          }
+          const doc = add(file.name, result.text, { hasEpubData: true });
+          await saveEpubData({
+            documentId: doc.id,
+            chapters: result.chapters,
+            images: result.images,
+          });
+          onOpenDocument(doc.id);
+          return;
+        } else {
+          text = await file.text();
+        }
+
+        if (!text.trim()) {
+          setError("Could not extract text from this file.");
           return;
         }
-        const doc = add(file.name, result.text, true);
-        await savePdfData({
-          documentId: doc.id,
-          pdfBytes,
-          words: result.words,
-          pageWordRanges: result.pageWordRanges,
-          numPages: result.numPages,
-        });
+        const doc = add(file.name, text);
         onOpenDocument(doc.id);
       } catch {
-        setError("Failed to process PDF. Please try another file.");
+        setError("Failed to process file. Please try another.");
       } finally {
         setLoading(false);
       }
@@ -70,7 +106,7 @@ export function HomePage({ onOpenDocument, dark, onToggleDark }: HomePageProps) 
         <div className="mb-8">
           <h2 className="text-2xl font-semibold text-foreground">Speed Reader</h2>
           <p className="text-muted-foreground mt-1">
-            Upload a PDF and read it faster with RSVP technique
+            Upload a document and read it faster with RSVP technique
           </p>
         </div>
 

@@ -1,4 +1,4 @@
-import { RiFilePdf2Line, RiDeleteBinLine, RiTimeLine } from "@remixicon/react";
+import { RiFilePdf2Line, RiFileTextLine, RiBookLine, RiDeleteBinLine, RiTimeLine } from "@remixicon/react";
 import { getCompletionPercentage, type StoredDocument } from "@/lib/storage";
 import { Button } from "@/components/ui/button";
 
@@ -29,7 +29,13 @@ export function DocumentCard({ doc, onOpen, onDelete }: DocumentCardProps) {
     >
       <div className="flex items-start gap-3">
         <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-          <RiFilePdf2Line className="size-5 text-primary" />
+          {doc.hasPdfData ? (
+            <RiFilePdf2Line className="size-5 text-primary" />
+          ) : doc.filename.toLowerCase().endsWith(".epub") ? (
+            <RiBookLine className="size-5 text-primary" />
+          ) : (
+            <RiFileTextLine className="size-5 text-primary" />
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-medium text-sm truncate text-foreground max-w-xs">

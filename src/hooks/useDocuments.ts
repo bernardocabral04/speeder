@@ -16,8 +16,8 @@ export function useDocuments() {
   }, []);
 
   const add = useCallback(
-    (filename: string, text: string, hasPdfData?: boolean) => {
-      const doc = saveDocument(filename, text, hasPdfData);
+    (filename: string, text: string, opts?: { hasPdfData?: boolean; hasEpubData?: boolean }) => {
+      const doc = saveDocument(filename, text, opts);
       refresh();
       return doc;
     },
