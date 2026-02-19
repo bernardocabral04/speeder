@@ -1,13 +1,17 @@
 import { useState, useCallback, useEffect } from "react";
 import { useTTS } from "./useTTS";
 import { useAzureTTS } from "./useAzureTTS";
+import { useKokoroTTS } from "./useKokoroTTS";
 import {
   type TTSProvider,
   type AzureConfig,
+  type KokoroConfig,
   getSelectedProvider,
   getAzureConfig,
+  getKokoroConfig,
   saveSelectedProvider,
   saveAzureConfig,
+  saveKokoroConfig,
 } from "@/lib/tts-providers";
 
 interface UseTTSEngineOptions {
@@ -22,70 +26,66 @@ export function useTTSEngine({ onWordBoundary, onEnd }: UseTTSEngineOptions) {
   const [enabled, setEnabled] = useState(false);
   const [provider, setProvider] = useState<TTSProvider>(getSelectedProvider);
   const [azureConfig, setAzureConfig] = useState<AzureConfig | null>(getAzureConfig);
+  const [kokoroConfig, setKokoroConfig] = useState<KokoroConfig | null>(getKokoroConfig);
 
   const browser = useTTS({ onWordBoundary, onEnd });
   const azure = useAzureTTS({ config: azureConfig, onWordBoundary, onEnd });
+  const kokoro = useKokoroTTS({ config: kokoroConfig, onWordBoundary, onEnd });
 
   const isAzure = provider === "azure" && azure.ready;
-  const speaking = isAzure ? azure.speaking : browser.speaking;
-  const rate = isAzure ? azure.rate : browser.rate;
+  const isKokoro = provider === "kokoro" && kokoro.ready;
+  const activeProvider = isKokoro ? kokoro : isAzure ? azure : browser;
+  const speaking = activeProvider.speaking;
+  const rate = activeProvider.rate;
 
   const speak = useCallback(
     (words: string[], fromIndex: number) => {
-      if (isAzure) {
-        azure.speak(words, fromIndex);
-      } else {
-        browser.speak(words, fromIndex);
-      }
+      activeProvider.speak(words, fromIndex);
     },
-    [isAzure, azure, browser]
+    [activeProvider]
   );
 
   const stop = useCallback(() => {
-    if (isAzure) {
-      azure.stop();
-    } else {
-      browser.stop();
-    }
-  }, [isAzure, azure, browser]);
+    activeProvider.stop();
+  }, [activeProvider]);
 
   const setRate = useCallback(
     (rateOrUpdater: number | ((prev: number) => number)) => {
-      if (isAzure) {
-        azure.setRate(rateOrUpdater);
-      } else {
-        browser.setRate(rateOrUpdater);
-      }
+      activeProvider.setRate(rateOrUpdater);
     },
-    [isAzure, azure, browser]
+    [activeProvider]
   );
 
   const toggleEnabled = useCallback(() => {
     setEnabled((prev) => {
       if (prev) {
-        // Turning off — stop any active speech
-        if (isAzure) azure.stop();
-        else browser.stop();
+        activeProvider.stop();
       }
       return !prev;
     });
-  }, [isAzure, azure, browser]);
+  }, [activeProvider]);
 
   const updateProvider = useCallback(
-    (newProvider: TTSProvider, newConfig: AzureConfig | null) => {
-      // Stop current speech
+    (
+      newProvider: TTSProvider,
+      newAzureConfig: AzureConfig | null,
+      newKokoroConfig: KokoroConfig | null,
+    ) => {
       if (speaking) {
-        if (isAzure) azure.stop();
-        else browser.stop();
+        activeProvider.stop();
       }
       setProvider(newProvider);
       saveSelectedProvider(newProvider);
-      if (newConfig) {
-        setAzureConfig(newConfig);
-        saveAzureConfig(newConfig);
+      if (newAzureConfig) {
+        setAzureConfig(newAzureConfig);
+        saveAzureConfig(newAzureConfig);
+      }
+      if (newKokoroConfig) {
+        setKokoroConfig(newKokoroConfig);
+        saveKokoroConfig(newKokoroConfig);
       }
     },
-    [speaking, isAzure, azure, browser]
+    [speaking, activeProvider]
   );
 
   // Stop speech on unmount
@@ -93,6 +93,7 @@ export function useTTSEngine({ onWordBoundary, onEnd }: UseTTSEngineOptions) {
     return () => {
       browser.stop();
       azure.stop();
+      kokoro.stop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -103,7 +104,9 @@ export function useTTSEngine({ onWordBoundary, onEnd }: UseTTSEngineOptions) {
     rate,
     provider,
     isAzure,
+    isKokoro,
     azureConfig,
+    kokoroConfig,
     // Browser-specific (for voice selector when using browser TTS)
     browserVoices: browser.voices,
     selectedBrowserVoice: browser.selectedVoice,

@@ -26,6 +26,7 @@ interface ReaderControlsProps {
   ttsEnabled: boolean;
   ttsRate: number;
   ttsIsAzure: boolean;
+  ttsIsKokoro: boolean;
   ttsBrowserVoices: SpeechSynthesisVoice[];
   ttsSelectedBrowserVoice: SpeechSynthesisVoice | null;
   // Actions
@@ -54,6 +55,7 @@ export function ReaderControls({
   ttsEnabled,
   ttsRate,
   ttsIsAzure,
+  ttsIsKokoro,
   ttsBrowserVoices,
   ttsSelectedBrowserVoice,
   onTogglePlay,
@@ -70,7 +72,7 @@ export function ReaderControls({
   onSetBrowserVoice,
   onOpenSettings,
 }: ReaderControlsProps) {
-  const providerLabel = ttsIsAzure ? "Azure" : "Browser";
+  const providerLabel = ttsIsKokoro ? "Kokoro" : ttsIsAzure ? "Azure" : "Browser";
 
   return (
     <div className="border-t border-border p-4 space-y-3">

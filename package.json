@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "kokoro:install": "python3.12 -m venv kokoro-server/.venv && kokoro-server/.venv/bin/pip install -r kokoro-server/requirements.txt",
+    "kokoro:start": "kokoro-server/.venv/bin/python kokoro-server/server.py",
+    "kokoro:dev": "npm run kokoro:start & npm run dev"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
@@ -17,6 +20,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.34.1",
+    "jszip": "^3.10.1",
     "microsoft-cognitiveservices-speech-sdk": "^1.48.0",
     "pdfjs-dist": "^5.4.624",
     "react": "^19.2.0",

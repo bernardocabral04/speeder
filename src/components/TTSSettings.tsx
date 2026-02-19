@@ -6,9 +6,13 @@ import {
 import {
   type TTSProvider,
   type AzureConfig,
+  type KokoroConfig,
   AZURE_VOICES,
+  KOKORO_VOICES,
   getAzureConfig,
+  getKokoroConfig,
   saveAzureConfig,
+  saveKokoroConfig,
   getSelectedProvider,
   saveSelectedProvider,
 } from "@/lib/tts-providers";
@@ -17,13 +21,20 @@ import { Button } from "@/components/ui/button";
 interface TTSSettingsProps {
   open: boolean;
   onClose: () => void;
-  onProviderChange: (provider: TTSProvider, config: AzureConfig | null) => void;
+  onProviderChange: (
+    provider: TTSProvider,
+    azureConfig: AzureConfig | null,
+    kokoroConfig: KokoroConfig | null,
+  ) => void;
 }
 
 export function TTSSettings({ open, onClose, onProviderChange }: TTSSettingsProps) {
   const [provider, setProvider] = useState<TTSProvider>(getSelectedProvider);
   const [azureConfig, setAzureConfig] = useState<AzureConfig>(
     () => getAzureConfig() ?? { subscriptionKey: "", region: "eastus", voiceName: AZURE_VOICES[0].id }
+  );
+  const [kokoroConfig, setKokoroConfig] = useState<KokoroConfig>(
+    () => getKokoroConfig() ?? { serverUrl: "http://localhost:8321", voiceName: KOKORO_VOICES[0].id }
   );
   const [saved, setSaved] = useState(false);
 
@@ -33,13 +44,29 @@ export function TTSSettings({ open, onClose, onProviderChange }: TTSSettingsProp
     saveSelectedProvider(provider);
     if (provider === "azure") {
       saveAzureConfig(azureConfig);
-      onProviderChange(provider, azureConfig);
+      onProviderChange(provider, azureConfig, null);
+    } else if (provider === "kokoro") {
+      saveKokoroConfig(kokoroConfig);
+      onProviderChange(provider, null, kokoroConfig);
     } else {
-      onProviderChange(provider, null);
+      onProviderChange(provider, null, null);
     }
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   };
+
+  const providerBtn = (value: TTSProvider, label: string) => (
+    <button
+      onClick={() => setProvider(value)}
+      className={`flex-1 text-sm px-3 py-2 rounded-lg border transition-colors ${
+        provider === value
+          ? "border-primary bg-primary/10 text-primary"
+          : "border-border text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -61,26 +88,9 @@ export function TTSSettings({ open, onClose, onProviderChange }: TTSSettingsProp
               Provider
             </label>
             <div className="flex gap-2">
-              <button
-                onClick={() => setProvider("browser")}
-                className={`flex-1 text-sm px-3 py-2 rounded-lg border transition-colors ${
-                  provider === "browser"
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Browser (Free)
-              </button>
-              <button
-                onClick={() => setProvider("azure")}
-                className={`flex-1 text-sm px-3 py-2 rounded-lg border transition-colors ${
-                  provider === "azure"
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Azure Speech
-              </button>
+              {providerBtn("browser", "Browser")}
+              {providerBtn("azure", "Azure")}
+              {providerBtn("kokoro", "Kokoro")}
             </div>
           </div>
 
@@ -148,7 +158,54 @@ export function TTSSettings({ open, onClose, onProviderChange }: TTSSettingsProp
                 >
                   portal.azure.com
                 </a>
-                {" "}— the F0 tier gives 500K chars/month free.
+                {" "}&mdash; the F0 tier gives 500K chars/month free.
+              </p>
+            </>
+          )}
+
+          {provider === "kokoro" && (
+            <>
+              {/* Server URL */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Server URL
+                </label>
+                <input
+                  type="text"
+                  value={kokoroConfig.serverUrl}
+                  onChange={(e) =>
+                    setKokoroConfig((c) => ({ ...c, serverUrl: e.target.value }))
+                  }
+                  placeholder="http://localhost:8321"
+                  className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+
+              {/* Voice */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Voice
+                </label>
+                <select
+                  value={kokoroConfig.voiceName}
+                  onChange={(e) =>
+                    setKokoroConfig((c) => ({ ...c, voiceName: e.target.value }))
+                  }
+                  className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-background text-foreground outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {KOKORO_VOICES.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Run the local Kokoro server:{" "}
+                <code className="text-[11px] bg-muted px-1.5 py-0.5 rounded">
+                  python kokoro-server/server.py
+                </code>
               </p>
             </>
           )}

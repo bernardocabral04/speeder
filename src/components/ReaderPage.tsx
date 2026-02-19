@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRSVP } from "@/hooks/useRSVP";
 import { useTTSEngine } from "@/hooks/useTTSEngine";
 import { usePdfDocument } from "@/hooks/usePdfDocument";
+import { useEpubDocument } from "@/hooks/useEpubDocument";
 import { updateDocument, type StoredDocument } from "@/lib/storage";
 import { ReaderHeader } from "./ReaderHeader";
 import { ReaderControls } from "./ReaderControls";
 import { WordDisplay } from "./WordDisplay";
 import { TextPane } from "./TextPane";
 import { PdfPane } from "./PdfPane";
+import { EpubPane } from "./EpubPane";
 import { TTSSettings } from "./TTSSettings";
 
 interface ReaderPageProps {
@@ -17,12 +19,19 @@ interface ReaderPageProps {
   onToggleDark: () => void;
 }
 
-type ViewMode = "text" | "pdf";
+type ViewMode = "text" | "pdf" | "epub";
 
 export function ReaderPage({ document: doc, onBack, dark, onToggleDark }: ReaderPageProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>(doc.hasPdfData ? "pdf" : "text");
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    doc.hasPdfData ? "pdf" : doc.hasEpubData ? "epub" : "text"
+  );
+  const [fontScale, setFontScale] = useState(100);
+  const [textFontScale, setTextFontScale] = useState(100);
+  const [pdfZoom, setPdfZoom] = useState(100);
+  const [epubZoom, setEpubZoom] = useState(100);
   const { pdfDoc, pdfData } = usePdfDocument(doc.hasPdfData ? doc.id : null);
+  const { epubData, imageUrls } = useEpubDocument(doc.hasEpubData ? doc.id : null);
 
   const handleProgress = useCallback(
     (index: number, wpm: number) => {
@@ -181,8 +190,25 @@ export function ReaderPage({ document: doc, onBack, dark, onToggleDark }: Reader
       <div className="flex-1 flex min-h-0">
         {/* Left pane - Word display */}
         <div className="flex-1 flex flex-col border-r border-border">
-          <div className="flex-1 min-h-0">
-            <WordDisplay word={rsvp.currentWord} />
+          <div className="flex-1 min-h-0 relative">
+            <div className="absolute top-3 right-3 z-10 flex items-center rounded-full bg-muted/60 backdrop-blur-sm ring-1 ring-border">
+              <button
+                onClick={() => setFontScale((s) => Math.max(50, s - 10))}
+                className="px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                -
+              </button>
+              <span className="px-1.5 py-1 text-xs font-medium text-foreground tabular-nums min-w-[3ch] text-center">
+                {fontScale}%
+              </span>
+              <button
+                onClick={() => setFontScale((s) => Math.min(200, s + 10))}
+                className="px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                +
+              </button>
+            </div>
+            <WordDisplay word={rsvp.currentWord} fontScale={fontScale} />
           </div>
 
           <ReaderControls
@@ -195,6 +221,7 @@ export function ReaderPage({ document: doc, onBack, dark, onToggleDark }: Reader
             ttsEnabled={tts.enabled}
             ttsRate={tts.rate}
             ttsIsAzure={tts.isAzure}
+            ttsIsKokoro={tts.isKokoro}
             ttsBrowserVoices={tts.browserVoices}
             ttsSelectedBrowserVoice={tts.selectedBrowserVoice}
             onTogglePlay={handleTogglePlay}
@@ -215,7 +242,7 @@ export function ReaderPage({ document: doc, onBack, dark, onToggleDark }: Reader
 
         {/* Right pane - Text or PDF view */}
         <div className="flex-1 min-h-0 flex flex-col">
-          {doc.hasPdfData && (
+          {(doc.hasPdfData || doc.hasEpubData) && (
             <div className="flex border-b border-border shrink-0">
               <button
                 onClick={() => setViewMode("text")}
@@ -227,19 +254,59 @@ export function ReaderPage({ document: doc, onBack, dark, onToggleDark }: Reader
               >
                 Text
               </button>
-              <button
-                onClick={() => setViewMode("pdf")}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
-                  viewMode === "pdf"
-                    ? "text-primary border-b-2 border-primary"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                PDF
-              </button>
+              {doc.hasPdfData && (
+                <button
+                  onClick={() => setViewMode("pdf")}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                    viewMode === "pdf"
+                      ? "text-primary border-b-2 border-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  PDF
+                </button>
+              )}
+              {doc.hasEpubData && (
+                <button
+                  onClick={() => setViewMode("epub")}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                    viewMode === "epub"
+                      ? "text-primary border-b-2 border-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  ePub
+                </button>
+              )}
             </div>
           )}
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 relative">
+            <div className="absolute top-3 right-3 z-10 flex items-center rounded-full bg-muted/60 backdrop-blur-sm ring-1 ring-border">
+              <button
+                onClick={() => {
+                  if (viewMode === "pdf") setPdfZoom((s) => Math.max(50, s - 10));
+                  else if (viewMode === "epub") setEpubZoom((s) => Math.max(50, s - 10));
+                  else setTextFontScale((s) => Math.max(50, s - 10));
+                }}
+                className="px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                -
+              </button>
+              <span className="px-1.5 py-1 text-xs font-medium text-foreground tabular-nums min-w-[3ch] text-center">
+                {viewMode === "pdf" ? pdfZoom : viewMode === "epub" ? epubZoom : textFontScale}%
+              </span>
+              <button
+                disabled={viewMode === "pdf" && pdfZoom >= 100}
+                onClick={() => {
+                  if (viewMode === "pdf") setPdfZoom((s) => Math.min(100, s + 10));
+                  else if (viewMode === "epub") setEpubZoom((s) => Math.min(200, s + 10));
+                  else setTextFontScale((s) => Math.min(200, s + 10));
+                }}
+                className="px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                +
+              </button>
+            </div>
             {viewMode === "pdf" && pdfDoc && pdfData ? (
               <PdfPane
                 pdfDoc={pdfDoc}
@@ -247,12 +314,23 @@ export function ReaderPage({ document: doc, onBack, dark, onToggleDark }: Reader
                 currentWordIndex={rsvp.currentIndex}
                 currentWord={rsvp.currentWord}
                 onWordClick={handleSeek}
+                zoomLevel={pdfZoom}
+              />
+            ) : viewMode === "epub" && epubData ? (
+              <EpubPane
+                epubData={epubData}
+                imageUrls={imageUrls}
+                currentWordIndex={rsvp.currentIndex}
+                currentWord={rsvp.currentWord}
+                onWordClick={handleSeek}
+                zoomLevel={epubZoom}
               />
             ) : (
               <TextPane
                 words={rsvp.words}
                 currentIndex={rsvp.currentIndex}
                 onWordClick={handleSeek}
+                fontScale={textFontScale}
               />
             )}
           </div>
