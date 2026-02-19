@@ -243,6 +243,7 @@ export function ReaderPage({ document: doc, onBack, dark, onToggleDark }: Reader
   const controlsElement = (
     <ReaderControls
       isPlaying={isPlaying}
+      ttsLoading={tts.enabled && tts.loading}
       currentIndex={rsvp.currentIndex}
       totalWords={rsvp.totalWords}
       wpm={rsvp.wpm}

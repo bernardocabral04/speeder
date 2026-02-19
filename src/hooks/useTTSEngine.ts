@@ -168,9 +168,12 @@ export function useTTSEngine({ onWordBoundary, onEnd }: UseTTSEngineOptions) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const loading = activeProvider.loading;
+
   return {
     enabled,
     speaking,
+    loading,
     rate,
     provider,
     isAzure,

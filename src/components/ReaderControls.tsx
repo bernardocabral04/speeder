@@ -10,6 +10,7 @@ import {
   RiVolumeUpLine,
   RiVolumeMuteLine,
   RiSettings3Line,
+  RiLoader4Line,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { AZURE_VOICES, KOKORO_VOICES } from "@/lib/tts-providers";
@@ -17,6 +18,7 @@ import { AZURE_VOICES, KOKORO_VOICES } from "@/lib/tts-providers";
 interface ReaderControlsProps {
   // Playback state
   isPlaying: boolean;
+  ttsLoading: boolean;
   currentIndex: number;
   totalWords: number;
   // RSVP speed
@@ -51,6 +53,7 @@ interface ReaderControlsProps {
 
 export function ReaderControls({
   isPlaying,
+  ttsLoading,
   currentIndex,
   totalWords,
   wpm,
@@ -108,7 +111,13 @@ export function ReaderControls({
           <RiArrowLeftSLine className="size-5" />
         </Button>
         <Button variant="outline" size="icon" onClick={onTogglePlay} className="mx-2">
-          {isPlaying ? <RiPauseFill className="size-5" /> : <RiPlayFill className="size-5" />}
+          {ttsLoading ? (
+            <RiLoader4Line className="size-5 animate-spin" />
+          ) : isPlaying ? (
+            <RiPauseFill className="size-5" />
+          ) : (
+            <RiPlayFill className="size-5" />
+          )}
         </Button>
         <Button variant="ghost" size="icon-sm" onClick={onSkipSentenceForward} title="Skip sentence forward">
           <RiArrowRightSLine className="size-5" />

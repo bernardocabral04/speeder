@@ -51,6 +51,7 @@ function getChunkLength(words: string[], fromIndex: number): number {
 
 export function useKokoroTTS({ config, onWordBoundary, onEnd }: UseKokoroTTSOptions) {
   const [speaking, setSpeaking] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [rate, setRate] = useState(1);
   const onWordBoundaryRef = useRef(onWordBoundary);
   onWordBoundaryRef.current = onWordBoundary;
@@ -171,6 +172,7 @@ export function useKokoroTTS({ config, onWordBoundary, onEnd }: UseKokoroTTSOpti
       };
 
       audio.onplay = () => {
+        setLoading(false);
         rafRef.current = requestAnimationFrame(syncLoop);
       };
 
@@ -273,6 +275,7 @@ export function useKokoroTTS({ config, onWordBoundary, onEnd }: UseKokoroTTSOpti
       generationRef.current += 1;
       stoppedRef.current = false;
       allWordsRef.current = words;
+      setLoading(true);
       setSpeaking(true);
       playFromIndex(fromIndex);
     },
@@ -282,6 +285,7 @@ export function useKokoroTTS({ config, onWordBoundary, onEnd }: UseKokoroTTSOpti
   const stop = useCallback(() => {
     stoppedRef.current = true;
     cleanup();
+    setLoading(false);
     setSpeaking(false);
   }, [cleanup]);
 
@@ -294,6 +298,7 @@ export function useKokoroTTS({ config, onWordBoundary, onEnd }: UseKokoroTTSOpti
 
   return {
     speaking,
+    loading,
     rate,
     speak,
     stop,

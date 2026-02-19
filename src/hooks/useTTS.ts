@@ -210,6 +210,7 @@ export function useTTS({ onWordBoundary, onEnd }: UseTTSOptions) {
   return {
     enabled,
     speaking,
+    loading: false as const,
     rate,
     voices,
     selectedVoice,

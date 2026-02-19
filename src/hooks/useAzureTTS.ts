@@ -67,6 +67,7 @@ function escapeXml(text: string): string {
 
 export function useAzureTTS({ config, onWordBoundary, onEnd }: UseAzureTTSOptions) {
   const [speaking, setSpeaking] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [rate, setRate] = useState(1);
   const onWordBoundaryRef = useRef(onWordBoundary);
   onWordBoundaryRef.current = onWordBoundary;
@@ -223,6 +224,7 @@ export function useAzureTTS({ config, onWordBoundary, onEnd }: UseAzureTTSOption
       };
 
       audio.onplay = () => {
+        setLoading(false);
         rafRef.current = requestAnimationFrame(syncLoop);
       };
 
@@ -327,6 +329,7 @@ export function useAzureTTS({ config, onWordBoundary, onEnd }: UseAzureTTSOption
       generationRef.current += 1;
       stoppedRef.current = false;
       allWordsRef.current = words;
+      setLoading(true);
       setSpeaking(true);
       playFromIndex(fromIndex);
     },
@@ -336,6 +339,7 @@ export function useAzureTTS({ config, onWordBoundary, onEnd }: UseAzureTTSOption
   const stop = useCallback(() => {
     stoppedRef.current = true;
     cleanup();
+    setLoading(false);
     setSpeaking(false);
   }, [cleanup]);
 
@@ -348,6 +352,7 @@ export function useAzureTTS({ config, onWordBoundary, onEnd }: UseAzureTTSOption
 
   return {
     speaking,
+    loading,
     rate,
     speak,
     stop,
