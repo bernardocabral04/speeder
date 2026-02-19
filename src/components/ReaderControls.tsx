@@ -114,15 +114,15 @@ export function ReaderControls({
       {/* Speed control: WPM or TTS rate */}
       {ttsEnabled ? (
         <div className="flex items-center justify-center gap-3">
-          <Button variant="ghost" size="icon-xs" onClick={() => onSetTTSRate((r) => Math.max(0.5, +(r - 0.1).toFixed(1)))}>
+          <Button variant="ghost" size="icon-xs" onClick={() => onSetTTSRate((r) => Math.max(0.5, +(r - 0.05).toFixed(2)))}>
             <RiSubtractLine className="size-3.5" />
           </Button>
           <div className="flex items-baseline gap-1">
             <input
               type="range"
               min={0.5}
-              max={2}
-              step={0.1}
+              max={4}
+              step={0.05}
               value={ttsRate}
               onChange={(e) => onSetTTSRate(Number(e.target.value))}
               className="w-28 h-1 rounded-full appearance-none bg-muted cursor-pointer
@@ -130,10 +130,10 @@ export function ReaderControls({
                 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer"
             />
             <span className="text-sm font-medium tabular-nums w-16 text-center">
-              {ttsRate.toFixed(1)}x <span className="text-xs text-muted-foreground">rate</span>
+              {ttsRate.toFixed(2)}x <span className="text-xs text-muted-foreground">rate</span>
             </span>
           </div>
-          <Button variant="ghost" size="icon-xs" onClick={() => onSetTTSRate((r) => Math.min(2, +(r + 0.1).toFixed(1)))}>
+          <Button variant="ghost" size="icon-xs" onClick={() => onSetTTSRate((r) => Math.min(4, +(r + 0.05).toFixed(2)))}>
             <RiAddLine className="size-3.5" />
           </Button>
         </div>
