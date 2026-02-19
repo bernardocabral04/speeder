@@ -10,6 +10,7 @@ interface PdfPaneProps {
   currentWordIndex: number;
   currentWord: string;
   onWordClick: (index: number) => void;
+  zoomLevel?: number;
 }
 
 interface PageDimension {
@@ -19,12 +20,19 @@ interface PageDimension {
 
 const PAGE_GAP = 12;
 
+function setsEqual(a: Set<number>, b: Set<number>): boolean {
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
+}
+
 export function PdfPane({
   pdfDoc,
   pdfData,
   currentWordIndex,
   currentWord,
   onWordClick,
+  zoomLevel = 100,
 }: PdfPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -32,18 +40,32 @@ export function PdfPane({
   const [ready, setReady] = useState(false);
   const [following, setFollowing] = useState(true);
   const [indicatorDirection, setIndicatorDirection] = useState<"up" | "down">("down");
+  const hasScrolledOnce = useRef(false);
+  const resizedRef = useRef(false);
+  const [visiblePages, setVisiblePages] = useState<Set<number>>(new Set());
+  const visiblePagesRef = useRef(visiblePages);
+  visiblePagesRef.current = visiblePages;
 
-  // Measure container width with ResizeObserver
+  // Measure container width with ResizeObserver (debounced)
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) setContainerWidth(entry.contentRect.width);
+    let timer: ReturnType<typeof setTimeout>;
+    const observer = new ResizeObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (containerRef.current) {
+          resizedRef.current = true;
+          setContainerWidth(containerRef.current.clientWidth);
+        }
+      }, 150);
     });
     observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [ready]);
 
   // Fetch page dimensions on mount
   useEffect(() => {
@@ -76,8 +98,8 @@ export function PdfPane({
     const padding = 32;
     const availableWidth = containerWidth - padding;
     const maxPageWidth = Math.max(...pageDimensions.map((d) => d.width));
-    return availableWidth / maxPageWidth;
-  }, [containerWidth, pageDimensions]);
+    return (availableWidth / maxPageWidth) * (zoomLevel / 100);
+  }, [containerWidth, pageDimensions, zoomLevel]);
 
   // Compute page offsets (cumulative Y positions)
   const pageOffsets = useMemo(() => {
@@ -96,6 +118,16 @@ export function PdfPane({
     return pageOffsets[lastIdx] + pageDimensions[lastIdx].height * scale;
   }, [pageDimensions, pageOffsets, scale]);
 
+  // Refs mirroring layout memos so scroll handler can read them without deps
+  const pageOffsetsRef = useRef(pageOffsets);
+  pageOffsetsRef.current = pageOffsets;
+  const pageDimensionsRef = useRef(pageDimensions);
+  pageDimensionsRef.current = pageDimensions;
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
+  const currentPageRef = useRef(currentPage);
+  currentPageRef.current = currentPage;
+
   // Detect user scroll intent (wheel / touch) → break follow
   useEffect(() => {
     const container = containerRef.current;
@@ -111,43 +143,108 @@ export function PdfPane({
     };
   }, [ready]);
 
-  // Update indicator direction as user scrolls
+  // Consolidated scroll handler: updates indicator direction + visible pages
+  // Uses refs so the handler is stable and doesn't cause re-renders on every frame.
+  // Only triggers a React re-render when the visible page set actually changes.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const updateDirection = () => {
-      const targetY = pageOffsets[currentPage] ?? 0;
-      setIndicatorDirection(targetY < container.scrollTop ? "up" : "down");
+    const computeVisiblePages = (st: number, vh: number): Set<number> => {
+      const offsets = pageOffsetsRef.current;
+      const dims = pageDimensionsRef.current;
+      const s = scaleRef.current;
+      if (dims.length === 0 || !vh) return new Set();
+
+      const pages = new Set<number>();
+      const bufferTop = st - vh;
+      const bufferBottom = st + vh * 2;
+
+      for (let i = 0; i < dims.length; i++) {
+        const top = offsets[i];
+        const bottom = top + dims[i].height * s;
+        if (bottom >= bufferTop && top <= bufferBottom) {
+          pages.add(i);
+        }
+      }
+      return pages;
     };
 
-    container.addEventListener("scroll", updateDirection, { passive: true });
-    return () => container.removeEventListener("scroll", updateDirection);
-  }, [ready, currentPage, pageOffsets]);
+    const onScroll = () => {
+      const st = container.scrollTop;
+      const vh = container.clientHeight;
 
-  // Auto-scroll when page changes (only when following)
+      // Update indicator direction
+      const targetY = pageOffsetsRef.current[currentPageRef.current] ?? 0;
+      setIndicatorDirection(targetY < st ? "up" : "down");
+
+      // Compute visible pages and only setState if changed
+      const next = computeVisiblePages(st, vh);
+      if (!setsEqual(next, visiblePagesRef.current)) {
+        setVisiblePages(next);
+      }
+    };
+
+    // Initial computation
+    onScroll();
+
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, [ready]);
+
+  // Recompute visible pages when layout changes (scale, dimensions, resize)
   useEffect(() => {
-    if (!ready || !following) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const st = container.scrollTop;
+    const vh = container.clientHeight;
+    if (!vh) return;
+
+    const offsets = pageOffsets;
+    const dims = pageDimensions;
+    if (dims.length === 0) return;
+
+    const pages = new Set<number>();
+    const bufferTop = st - vh;
+    const bufferBottom = st + vh * 2;
+
+    for (let i = 0; i < dims.length; i++) {
+      const top = offsets[i];
+      const bottom = top + dims[i].height * scale;
+      if (bottom >= bufferTop && top <= bufferBottom) {
+        pages.add(i);
+      }
+    }
+    if (!setsEqual(pages, visiblePagesRef.current)) {
+      setVisiblePages(pages);
+    }
+  }, [pageOffsets, pageDimensions, scale]);
+
+  // Auto-scroll to keep current word visible (only when following)
+  useEffect(() => {
+    if (!ready || !following || !containerWidth) return;
 
     const container = containerRef.current;
     if (!container || pageOffsets[currentPage] == null) return;
 
-    const targetY = pageOffsets[currentPage];
-    container.scrollTo({ top: targetY, behavior: "smooth" });
-  }, [currentPage, ready, pageOffsets, following]);
+    const word = pdfData.words[currentWordIndex];
+    if (!word) return;
 
-  // Determine visible pages: currentPage ± 1
-  const visiblePages = useMemo(() => {
-    const pages: number[] = [];
-    for (
-      let i = Math.max(0, currentPage - 1);
-      i <= Math.min(pdfDoc.numPages - 1, currentPage + 1);
-      i++
-    ) {
-      pages.push(i);
-    }
-    return pages;
-  }, [currentPage, pdfDoc.numPages]);
+    // Convert PDF coords (origin bottom-left) to viewport Y (origin top-left)
+    const pageDim = pageDimensions[word.pageIndex];
+    if (!pageDim) return;
+
+    const wordViewportY = (pageDim.height - word.pdfRect.y) * scale;
+    const wordAbsoluteY = pageOffsets[word.pageIndex] + wordViewportY;
+
+    // Center the word in the visible area
+    const targetY = wordAbsoluteY - container.clientHeight / 2;
+    const behavior = !hasScrolledOnce.current || resizedRef.current ? "instant" : "smooth";
+    resizedRef.current = false;
+    container.scrollTo({ top: targetY, behavior });
+    hasScrolledOnce.current = true;
+  }, [currentWordIndex, ready, following, pageOffsets, currentPage, pdfData.words, pageDimensions, scale, containerWidth]);
 
   // Get word range for a page
   const getPageWordRange = useCallback(
@@ -184,18 +281,20 @@ export function PdfPane({
       <div ref={containerRef} className="h-full overflow-y-auto scrollbar-thin">
         <div className="relative" style={{ height: totalHeight }}>
           {pageDimensions.map((dim, pageIdx) => {
-            const isVisible = visiblePages.includes(pageIdx);
+            const isVisible = visiblePages.has(pageIdx);
             const pageHeight = dim.height * scale;
             const pageWidth = dim.width * scale;
             const top = pageOffsets[pageIdx];
+            const left = (containerWidth - pageWidth) / 2;
 
             if (!isVisible) {
               return (
                 <div
                   key={pageIdx}
-                  className="absolute left-1/2 -translate-x-1/2 bg-muted/30 border border-border rounded flex items-center justify-center"
+                  className="absolute bg-muted/30 border border-border rounded flex items-center justify-center"
                   style={{
                     top,
+                    left,
                     width: pageWidth,
                     height: pageHeight,
                   }}
@@ -212,8 +311,8 @@ export function PdfPane({
             return (
               <div
                 key={pageIdx}
-                className="absolute left-1/2 -translate-x-1/2"
-                style={{ top }}
+                className="absolute"
+                style={{ top, left }}
               >
                 <PdfPage
                   pdfDoc={pdfDoc}

@@ -3,9 +3,10 @@ import { getORPIndex } from "@/lib/rsvp";
 
 interface WordDisplayProps {
   word: string;
+  fontScale?: number;
 }
 
-export function WordDisplay({ word }: WordDisplayProps) {
+export function WordDisplay({ word, fontScale = 100 }: WordDisplayProps) {
   const { before, orp, after } = useMemo(() => {
     if (!word) return { before: "", orp: "", after: "" };
     const idx = getORPIndex(word);
@@ -33,8 +34,12 @@ export function WordDisplay({ word }: WordDisplayProps) {
 
       {/* 3-column grid: before (right-aligned) | ORP (centered) | after (left-aligned) */}
       <div
-        className="w-full font-mono text-5xl md:text-6xl lg:text-7xl tracking-wider"
-        style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr" }}
+        className="w-full font-mono tracking-wider"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr auto 1fr",
+          fontSize: `clamp(1.5rem, ${fontScale / 100 * 4}vw, ${fontScale / 100 * 4.5}rem)`,
+        }}
       >
         <span className="text-right text-foreground whitespace-pre">{before}</span>
         <span className="text-primary font-bold">{orp}</span>

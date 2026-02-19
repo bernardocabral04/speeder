@@ -5,15 +5,17 @@ interface TextPaneProps {
   words: string[];
   currentIndex: number;
   onWordClick: (index: number) => void;
+  fontScale?: number;
 }
 
 const WINDOW_SIZE = 500;
 
-export function TextPane({ words, currentIndex, onWordClick }: TextPaneProps) {
+export function TextPane({ words, currentIndex, onWordClick, fontScale = 100 }: TextPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLSpanElement>(null);
   const [following, setFollowing] = useState(true);
   const [indicatorDirection, setIndicatorDirection] = useState<"up" | "down">("down");
+  const hasScrolledOnce = useRef(false);
 
   // Virtualized window: show 500 words before and after current position
   const { windowStart, windowEnd } = useMemo(() => {
@@ -64,9 +66,10 @@ export function TextPane({ words, currentIndex, onWordClick }: TextPaneProps) {
     if (!following || !activeRef.current) return;
 
     activeRef.current.scrollIntoView({
-      behavior: "smooth",
+      behavior: hasScrolledOnce.current ? "smooth" : "instant",
       block: "center",
     });
+    hasScrolledOnce.current = true;
   }, [currentIndex, following]);
 
   const handleFollow = useCallback(() => {
@@ -85,7 +88,8 @@ export function TextPane({ words, currentIndex, onWordClick }: TextPaneProps) {
     <div className="h-full relative">
       <div
         ref={containerRef}
-        className="h-full overflow-y-auto p-6 text-base leading-relaxed scrollbar-thin"
+        className="h-full overflow-y-auto p-6 leading-relaxed scrollbar-thin"
+        style={{ fontSize: `${fontScale / 100}rem` }}
       >
         {windowStart > 0 && (
           <div className="text-muted-foreground text-sm mb-3 text-center">
@@ -97,19 +101,20 @@ export function TextPane({ words, currentIndex, onWordClick }: TextPaneProps) {
             const globalIndex = windowStart + i;
             const isActive = globalIndex === currentIndex;
             return (
-              <span
-                key={globalIndex}
-                ref={isActive ? activeRef : undefined}
-                onClick={() => handleWordClick(globalIndex)}
-                className={
-                  isActive
-                    ? "bg-primary/20 text-primary font-semibold rounded px-0.5 cursor-pointer transition-colors"
-                    : globalIndex < currentIndex
-                      ? "text-muted-foreground/60 cursor-pointer hover:text-foreground transition-colors"
-                      : "text-foreground cursor-pointer hover:text-primary/70 transition-colors"
-                }
-              >
-                {word}{" "}
+              <span key={globalIndex}>
+                <span
+                  ref={isActive ? activeRef : undefined}
+                  onClick={() => handleWordClick(globalIndex)}
+                  className={
+                    isActive
+                      ? "bg-primary/20 text-primary rounded px-0.5 cursor-pointer transition-colors [text-shadow:0.3px_0_0_currentColor,-0.3px_0_0_currentColor]"
+                      : globalIndex < currentIndex
+                        ? "text-muted-foreground/60 cursor-pointer hover:text-foreground transition-colors"
+                        : "text-foreground cursor-pointer hover:text-primary/70 transition-colors"
+                  }
+                >
+                  {word}
+                </span>{" "}
               </span>
             );
           })}
