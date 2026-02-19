@@ -85,9 +85,8 @@ function buildUtterance(
   };
 
   utterance.onerror = (event) => {
-    if (event.error !== "interrupted" && event.error !== "canceled") {
-      console.warn("TTS error:", event.error);
-    }
+    if (event.error === "interrupted" || event.error === "canceled") return;
+    console.warn("TTS error:", event.error);
     refs.setSpeaking(false);
   };
 

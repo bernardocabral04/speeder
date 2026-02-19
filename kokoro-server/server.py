@@ -225,7 +225,17 @@ async def synthesize(req: SynthesizeRequest):
     if not all_audio:
         return SynthesizeResponse(audio="", timestamps=[], sample_rate=SAMPLE_RATE)
 
-    combined = np.concatenate(all_audio)
+    # Pad with silence to prevent clipping at start/end of playback
+    pad_samples = int(SAMPLE_RATE * 0.08)  # 80ms
+    silence = np.zeros(pad_samples, dtype=np.float32)
+    combined = np.concatenate([silence, *all_audio, silence])
+
+    # Shift timestamps to account for the leading silence
+    pad_seconds = pad_samples / SAMPLE_RATE
+    for ts in all_timestamps:
+        ts.start = round(ts.start + pad_seconds, 4)
+        ts.end = round(ts.end + pad_seconds, 4)
+
     audio_b64 = _audio_to_base64_wav(combined, SAMPLE_RATE)
 
     return SynthesizeResponse(

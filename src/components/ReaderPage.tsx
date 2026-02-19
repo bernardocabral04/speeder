@@ -254,6 +254,8 @@ export function ReaderPage({ document: doc, onBack, dark, onToggleDark }: Reader
       ttsIsKokoro={tts.isKokoro}
       ttsBrowserVoices={tts.browserVoices}
       ttsSelectedBrowserVoice={tts.selectedBrowserVoice}
+      ttsAzureVoiceName={tts.azureConfig?.voiceName ?? null}
+      ttsKokoroVoiceName={tts.kokoroConfig?.voiceName ?? null}
       onTogglePlay={handleTogglePlay}
       onSeek={handleSeek}
       onSkipSentenceBack={handleSkipSentenceBack}
@@ -266,6 +268,7 @@ export function ReaderPage({ document: doc, onBack, dark, onToggleDark }: Reader
       onSetTTSRate={tts.setRate}
       onToggleTTS={handleToggleTTS}
       onSetBrowserVoice={tts.setSelectedBrowserVoice}
+      onSetVoice={tts.setVoice}
       onOpenSettings={() => setSettingsOpen(true)}
     />
   );

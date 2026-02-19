@@ -81,9 +81,13 @@ export function useAzureTTS({ config, onWordBoundary, onEnd }: UseAzureTTSOption
   const rafRef = useRef<number>(0);
   const lastReportedRef = useRef(-1);
   const prefetchedRef = useRef<ChunkResult | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const generationRef = useRef(0);
 
   const cleanup = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
+    abortRef.current?.abort();
+    abortRef.current = null;
     if (audioRef.current) {
       audioRef.current.pause();
       URL.revokeObjectURL(audioRef.current.src);
@@ -266,6 +270,13 @@ export function useAzureTTS({ config, onWordBoundary, onEnd }: UseAzureTTSOption
         return;
       }
 
+      const gen = generationRef.current;
+
+      // Create a new abort controller for this playback session
+      abortRef.current?.abort();
+      const ac = new AbortController();
+      abortRef.current = ac;
+
       // Use prefetched chunk if available and matches, otherwise synthesize
       let chunk: ChunkResult | null = null;
       if (prefetchedRef.current?.startIndex === startIndex) {
@@ -276,8 +287,8 @@ export function useAzureTTS({ config, onWordBoundary, onEnd }: UseAzureTTSOption
         chunk = await synthesizeChunk(startIndex, config.voiceName);
       }
 
-      if (!chunk || stoppedRef.current) {
-        setSpeaking(false);
+      if (!chunk || stoppedRef.current || ac.signal.aborted || gen !== generationRef.current) {
+        if (gen === generationRef.current) setSpeaking(false);
         return;
       }
 
@@ -291,16 +302,17 @@ export function useAzureTTS({ config, onWordBoundary, onEnd }: UseAzureTTSOption
 
       // Play current chunk
       playChunk(chunk, async () => {
-        if (stoppedRef.current) return;
+        if (stoppedRef.current || gen !== generationRef.current) return;
 
         // Store prefetched result if ready
         if (prefetchPromise) {
           const prefetched = await prefetchPromise;
-          if (!stoppedRef.current && prefetched) {
+          if (!stoppedRef.current && gen === generationRef.current && prefetched) {
             prefetchedRef.current = prefetched;
           }
         }
 
+        if (gen !== generationRef.current) return;
         playFromIndex(nextStartIndex);
       });
     },
@@ -312,6 +324,7 @@ export function useAzureTTS({ config, onWordBoundary, onEnd }: UseAzureTTSOption
       if (!config?.subscriptionKey || !config?.region) return;
 
       cleanup();
+      generationRef.current += 1;
       stoppedRef.current = false;
       allWordsRef.current = words;
       setSpeaking(true);

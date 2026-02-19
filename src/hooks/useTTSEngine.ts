@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useTTS } from "./useTTS";
 import { useAzureTTS } from "./useAzureTTS";
 import { useKokoroTTS } from "./useKokoroTTS";
@@ -20,7 +20,7 @@ interface UseTTSEngineOptions {
 }
 
 /**
- * Unified TTS hook that delegates to browser or Azure provider.
+ * Unified TTS hook that delegates to browser, Azure, or Kokoro provider.
  */
 export function useTTSEngine({ onWordBoundary, onEnd }: UseTTSEngineOptions) {
   const [enabled, setEnabled] = useState(false);
@@ -28,9 +28,20 @@ export function useTTSEngine({ onWordBoundary, onEnd }: UseTTSEngineOptions) {
   const [azureConfig, setAzureConfig] = useState<AzureConfig | null>(getAzureConfig);
   const [kokoroConfig, setKokoroConfig] = useState<KokoroConfig | null>(getKokoroConfig);
 
-  const browser = useTTS({ onWordBoundary, onEnd });
-  const azure = useAzureTTS({ config: azureConfig, onWordBoundary, onEnd });
-  const kokoro = useKokoroTTS({ config: kokoroConfig, onWordBoundary, onEnd });
+  // Track playback position so we can restart on voice/rate changes
+  const lastWordsRef = useRef<string[]>([]);
+  const lastWordIndexRef = useRef(0);
+  const onWordBoundaryRef = useRef(onWordBoundary);
+  onWordBoundaryRef.current = onWordBoundary;
+
+  const trackingWordBoundary = useCallback((wordIndex: number) => {
+    lastWordIndexRef.current = wordIndex;
+    onWordBoundaryRef.current(wordIndex);
+  }, []);
+
+  const browser = useTTS({ onWordBoundary: trackingWordBoundary, onEnd });
+  const azure = useAzureTTS({ config: azureConfig, onWordBoundary: trackingWordBoundary, onEnd });
+  const kokoro = useKokoroTTS({ config: kokoroConfig, onWordBoundary: trackingWordBoundary, onEnd });
 
   const isAzure = provider === "azure" && azure.ready;
   const isKokoro = provider === "kokoro" && kokoro.ready;
@@ -38,8 +49,14 @@ export function useTTSEngine({ onWordBoundary, onEnd }: UseTTSEngineOptions) {
   const speaking = activeProvider.speaking;
   const rate = activeProvider.rate;
 
+  const speakingRef = useRef(speaking);
+  speakingRef.current = speaking;
+  const restartTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
   const speak = useCallback(
     (words: string[], fromIndex: number) => {
+      lastWordsRef.current = words;
+      lastWordIndexRef.current = fromIndex;
       activeProvider.speak(words, fromIndex);
     },
     [activeProvider]
@@ -49,11 +66,23 @@ export function useTTSEngine({ onWordBoundary, onEnd }: UseTTSEngineOptions) {
     activeProvider.stop();
   }, [activeProvider]);
 
+  const restartIfSpeaking = useCallback(() => {
+    if ((speakingRef.current || restartTimerRef.current) && lastWordsRef.current.length > 0) {
+      activeProvider.stop();
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = setTimeout(() => {
+        restartTimerRef.current = undefined;
+        activeProvider.speak(lastWordsRef.current, lastWordIndexRef.current);
+      }, 300);
+    }
+  }, [activeProvider]);
+
   const setRate = useCallback(
     (rateOrUpdater: number | ((prev: number) => number)) => {
       activeProvider.setRate(rateOrUpdater);
+      restartIfSpeaking();
     },
-    [activeProvider]
+    [activeProvider, restartIfSpeaking]
   );
 
   const toggleEnabled = useCallback(() => {
@@ -88,9 +117,50 @@ export function useTTSEngine({ onWordBoundary, onEnd }: UseTTSEngineOptions) {
     [speaking, activeProvider]
   );
 
+  const setVoice = useCallback(
+    (voiceName: string) => {
+      if (provider === "azure" && azureConfig) {
+        const updated = { ...azureConfig, voiceName };
+        setAzureConfig(updated);
+        saveAzureConfig(updated);
+      } else if (provider === "kokoro" && kokoroConfig) {
+        const updated = { ...kokoroConfig, voiceName };
+        setKokoroConfig(updated);
+        saveKokoroConfig(updated);
+      }
+      // Restart will happen via the useEffect below when config state updates
+    },
+    [provider, azureConfig, kokoroConfig]
+  );
+
+  // Restart speech when voice changes while speaking
+  const prevAzureVoiceRef = useRef(azureConfig?.voiceName);
+  const prevKokoroVoiceRef = useRef(kokoroConfig?.voiceName);
+  const prevBrowserVoiceRef = useRef(browser.selectedVoice);
+  useEffect(() => {
+    const azureVoiceChanged = azureConfig?.voiceName !== prevAzureVoiceRef.current;
+    const kokoroVoiceChanged = kokoroConfig?.voiceName !== prevKokoroVoiceRef.current;
+    const browserVoiceChanged = browser.selectedVoice !== prevBrowserVoiceRef.current;
+    prevAzureVoiceRef.current = azureConfig?.voiceName;
+    prevKokoroVoiceRef.current = kokoroConfig?.voiceName;
+    prevBrowserVoiceRef.current = browser.selectedVoice;
+
+    const isBrowser = !isAzure && !isKokoro;
+    const voiceChanged =
+      (azureVoiceChanged && isAzure) ||
+      (kokoroVoiceChanged && isKokoro) ||
+      (browserVoiceChanged && isBrowser);
+
+    if (voiceChanged && speakingRef.current && lastWordsRef.current.length > 0) {
+      activeProvider.stop();
+      activeProvider.speak(lastWordsRef.current, lastWordIndexRef.current);
+    }
+  }, [azureConfig?.voiceName, kokoroConfig?.voiceName, browser.selectedVoice, isAzure, isKokoro, activeProvider]);
+
   // Stop speech on unmount
   useEffect(() => {
     return () => {
+      clearTimeout(restartTimerRef.current);
       browser.stop();
       azure.stop();
       kokoro.stop();
@@ -117,5 +187,6 @@ export function useTTSEngine({ onWordBoundary, onEnd }: UseTTSEngineOptions) {
     setRate,
     toggleEnabled,
     updateProvider,
+    setVoice,
   } as const;
 }

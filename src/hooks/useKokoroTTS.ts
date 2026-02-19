@@ -65,9 +65,13 @@ export function useKokoroTTS({ config, onWordBoundary, onEnd }: UseKokoroTTSOpti
   const rafRef = useRef<number>(0);
   const lastReportedRef = useRef(-1);
   const prefetchedRef = useRef<ChunkResult | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const generationRef = useRef(0);
 
   const cleanup = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
+    abortRef.current?.abort();
+    abortRef.current = null;
     if (audioRef.current) {
       audioRef.current.pause();
       URL.revokeObjectURL(audioRef.current.src);
@@ -81,7 +85,7 @@ export function useKokoroTTS({ config, onWordBoundary, onEnd }: UseKokoroTTSOpti
    * Synthesize a chunk via the local Kokoro server.
    */
   const synthesizeChunk = useCallback(
-    async (startIndex: number): Promise<ChunkResult | null> => {
+    async (startIndex: number, signal?: AbortSignal): Promise<ChunkResult | null> => {
       if (!config?.serverUrl) return null;
 
       const words = allWordsRef.current;
@@ -100,6 +104,7 @@ export function useKokoroTTS({ config, onWordBoundary, onEnd }: UseKokoroTTSOpti
             voice: config.voiceName,
             speed: rateRef.current,
           }),
+          signal,
         });
 
         if (!res.ok) return null;
@@ -213,6 +218,13 @@ export function useKokoroTTS({ config, onWordBoundary, onEnd }: UseKokoroTTSOpti
         return;
       }
 
+      const gen = generationRef.current;
+
+      // Create a new abort controller for this playback session
+      abortRef.current?.abort();
+      const ac = new AbortController();
+      abortRef.current = ac;
+
       // Use prefetched chunk if available and matches
       let chunk: ChunkResult | null = null;
       if (prefetchedRef.current?.startIndex === startIndex) {
@@ -220,11 +232,11 @@ export function useKokoroTTS({ config, onWordBoundary, onEnd }: UseKokoroTTSOpti
         prefetchedRef.current = null;
       } else {
         prefetchedRef.current = null;
-        chunk = await synthesizeChunk(startIndex);
+        chunk = await synthesizeChunk(startIndex, ac.signal);
       }
 
-      if (!chunk || stoppedRef.current) {
-        setSpeaking(false);
+      if (!chunk || stoppedRef.current || ac.signal.aborted || gen !== generationRef.current) {
+        if (gen === generationRef.current) setSpeaking(false);
         return;
       }
 
@@ -233,19 +245,20 @@ export function useKokoroTTS({ config, onWordBoundary, onEnd }: UseKokoroTTSOpti
       // Pre-synthesize next chunk in parallel with playback
       let prefetchPromise: Promise<ChunkResult | null> | null = null;
       if (nextStartIndex < words.length) {
-        prefetchPromise = synthesizeChunk(nextStartIndex);
+        prefetchPromise = synthesizeChunk(nextStartIndex, ac.signal);
       }
 
       playChunk(chunk, async () => {
-        if (stoppedRef.current) return;
+        if (stoppedRef.current || gen !== generationRef.current) return;
 
         if (prefetchPromise) {
           const prefetched = await prefetchPromise;
-          if (!stoppedRef.current && prefetched) {
+          if (!stoppedRef.current && gen === generationRef.current && prefetched) {
             prefetchedRef.current = prefetched;
           }
         }
 
+        if (gen !== generationRef.current) return;
         playFromIndex(nextStartIndex);
       });
     },
@@ -257,6 +270,7 @@ export function useKokoroTTS({ config, onWordBoundary, onEnd }: UseKokoroTTSOpti
       if (!config?.serverUrl) return;
 
       cleanup();
+      generationRef.current += 1;
       stoppedRef.current = false;
       allWordsRef.current = words;
       setSpeaking(true);

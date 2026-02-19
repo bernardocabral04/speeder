@@ -12,6 +12,7 @@ import {
   RiSettings3Line,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
+import { AZURE_VOICES, KOKORO_VOICES } from "@/lib/tts-providers";
 
 interface ReaderControlsProps {
   // Playback state
@@ -29,6 +30,8 @@ interface ReaderControlsProps {
   ttsIsKokoro: boolean;
   ttsBrowserVoices: SpeechSynthesisVoice[];
   ttsSelectedBrowserVoice: SpeechSynthesisVoice | null;
+  ttsAzureVoiceName: string | null;
+  ttsKokoroVoiceName: string | null;
   // Actions
   onTogglePlay: () => void;
   onSeek: (index: number) => void;
@@ -42,6 +45,7 @@ interface ReaderControlsProps {
   onSetTTSRate: (rateOrUpdater: number | ((prev: number) => number)) => void;
   onToggleTTS: () => void;
   onSetBrowserVoice: (voice: SpeechSynthesisVoice) => void;
+  onSetVoice: (voiceName: string) => void;
   onOpenSettings: () => void;
 }
 
@@ -58,6 +62,8 @@ export function ReaderControls({
   ttsIsKokoro,
   ttsBrowserVoices,
   ttsSelectedBrowserVoice,
+  ttsAzureVoiceName,
+  ttsKokoroVoiceName,
   onTogglePlay,
   onSeek,
   onSkipSentenceBack,
@@ -70,6 +76,7 @@ export function ReaderControls({
   onSetTTSRate,
   onToggleTTS,
   onSetBrowserVoice,
+  onSetVoice,
   onOpenSettings,
 }: ReaderControlsProps) {
   const providerLabel = ttsIsKokoro ? "Kokoro" : ttsIsAzure ? "Azure" : "Browser";
@@ -203,7 +210,7 @@ export function ReaderControls({
           {ttsEnabled ? `Read aloud (${providerLabel})` : "Read aloud"}
         </button>
 
-        {ttsEnabled && !ttsIsAzure && ttsBrowserVoices.length > 0 && (
+        {ttsEnabled && !ttsIsAzure && !ttsIsKokoro && ttsBrowserVoices.length > 0 && (
           <select
             value={ttsSelectedBrowserVoice?.name ?? ""}
             onChange={(e) => {
@@ -215,6 +222,34 @@ export function ReaderControls({
             {ttsBrowserVoices.map((v) => (
               <option key={v.name} value={v.name}>
                 {v.name}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {ttsEnabled && ttsIsAzure && (
+          <select
+            value={ttsAzureVoiceName ?? ""}
+            onChange={(e) => onSetVoice(e.target.value)}
+            className="text-xs bg-muted/50 text-foreground border border-border rounded-full px-2 py-1 max-w-[160px] truncate outline-none focus:ring-1 focus:ring-ring"
+          >
+            {AZURE_VOICES.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.label}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {ttsEnabled && ttsIsKokoro && (
+          <select
+            value={ttsKokoroVoiceName ?? ""}
+            onChange={(e) => onSetVoice(e.target.value)}
+            className="text-xs bg-muted/50 text-foreground border border-border rounded-full px-2 py-1 max-w-[160px] truncate outline-none focus:ring-1 focus:ring-ring"
+          >
+            {KOKORO_VOICES.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.label}
               </option>
             ))}
           </select>
