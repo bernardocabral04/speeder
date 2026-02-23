@@ -34,6 +34,8 @@ interface ReaderControlsProps {
   ttsSelectedBrowserVoice: SpeechSynthesisVoice | null;
   ttsAzureVoiceName: string | null;
   ttsKokoroVoiceName: string | null;
+  // Layout
+  compact?: boolean;
   // Actions
   onTogglePlay: () => void;
   onSeek: (index: number) => void;
@@ -81,8 +83,111 @@ export function ReaderControls({
   onSetBrowserVoice,
   onSetVoice,
   onOpenSettings,
+  compact = false,
 }: ReaderControlsProps) {
   const providerLabel = ttsIsKokoro ? "Kokoro" : ttsIsAzure ? "Azure" : "Browser";
+
+  const remainingWords = totalWords - currentIndex;
+  const estimatedMinutes = ttsEnabled
+    ? remainingWords / (150 * ttsRate)
+    : remainingWords / (effectiveWpm || wpm || 200);
+
+  let timeLeft: string;
+  if (estimatedMinutes < 1) {
+    timeLeft = `~${Math.max(1, Math.round(estimatedMinutes * 60))} sec`;
+  } else if (estimatedMinutes < 60) {
+    timeLeft = `~${Math.round(estimatedMinutes)} min`;
+  } else {
+    const h = Math.floor(estimatedMinutes / 60);
+    const m = Math.round(estimatedMinutes % 60);
+    timeLeft = m > 0 ? `~${h}h ${m}min` : `~${h}h`;
+  }
+
+  const speedLabel = ttsEnabled
+    ? `${ttsRate.toFixed(2)}x`
+    : `${wpm} WPM`;
+
+  if (compact) {
+    return (
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 rounded-full bg-muted/80 backdrop-blur-sm ring-1 ring-border px-2 py-1">
+        {/* Nav buttons */}
+        <Button variant="ghost" size="icon-xs" onClick={onSkipParaBack} title="Skip paragraph back">
+          <RiArrowLeftDoubleLine className="size-3.5" />
+        </Button>
+        <Button variant="ghost" size="icon-xs" onClick={onSkipSentenceBack} title="Skip sentence back">
+          <RiArrowLeftSLine className="size-4" />
+        </Button>
+        <Button variant="ghost" size="icon-xs" onClick={onTogglePlay} title={isPlaying ? "Pause" : "Play"}>
+          {ttsLoading ? (
+            <RiLoader4Line className="size-4 animate-spin" />
+          ) : isPlaying ? (
+            <RiPauseFill className="size-4" />
+          ) : (
+            <RiPlayFill className="size-4" />
+          )}
+        </Button>
+        <Button variant="ghost" size="icon-xs" onClick={onSkipSentenceForward} title="Skip sentence forward">
+          <RiArrowRightSLine className="size-4" />
+        </Button>
+        <Button variant="ghost" size="icon-xs" onClick={onSkipParaForward} title="Skip paragraph forward">
+          <RiArrowRightDoubleLine className="size-3.5" />
+        </Button>
+
+        {/* Divider */}
+        <div className="w-px h-4 bg-border mx-0.5" />
+
+        {/* Speed +/- */}
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() =>
+            ttsEnabled
+              ? onSetTTSRate((r) => Math.max(0.5, +(r - 0.05).toFixed(2)))
+              : onAdjustWpm(-10)
+          }
+          title="Decrease speed"
+        >
+          <RiSubtractLine className="size-3" />
+        </Button>
+        <span className="text-xs font-medium tabular-nums px-1 select-none">{speedLabel}</span>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() =>
+            ttsEnabled
+              ? onSetTTSRate((r) => Math.min(4, +(r + 0.05).toFixed(2)))
+              : onAdjustWpm(10)
+          }
+          title="Increase speed"
+        >
+          <RiAddLine className="size-3" />
+        </Button>
+
+        {/* Divider */}
+        <div className="w-px h-4 bg-border mx-0.5" />
+
+        {/* TTS toggle */}
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={onToggleTTS}
+          title={ttsEnabled ? `Read aloud on (${providerLabel})` : "Read aloud"}
+          className={ttsEnabled ? "text-primary" : ""}
+        >
+          {ttsEnabled ? (
+            <RiVolumeUpLine className="size-3.5" />
+          ) : (
+            <RiVolumeMuteLine className="size-3.5" />
+          )}
+        </Button>
+
+        {/* Settings */}
+        <Button variant="ghost" size="icon-xs" onClick={onOpenSettings} title="Settings">
+          <RiSettings3Line className="size-3.5" />
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="border-t border-border p-4 space-y-3">
@@ -100,6 +205,9 @@ export function ReaderControls({
             [&::-webkit-slider-thumb]:shadow-sm [&::-webkit-slider-thumb]:transition-transform
             [&::-webkit-slider-thumb]:hover:scale-125"
         />
+        <span className="absolute right-0 -bottom-5 text-sm text-muted-foreground tabular-nums">
+          {totalWords > 0 ? Math.round((currentIndex / (totalWords - 1)) * 100) : 0}% ({timeLeft})
+        </span>
       </div>
 
       {/* Navigation buttons */}
@@ -264,14 +372,16 @@ export function ReaderControls({
           </select>
         )}
 
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={onOpenSettings}
-          title="TTS settings"
-        >
-          <RiSettings3Line className="size-3.5" />
-        </Button>
+        {ttsEnabled && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={onOpenSettings}
+            title="TTS settings"
+          >
+            <RiSettings3Line className="size-3.5" />
+          </Button>
+        )}
       </div>
     </div>
   );

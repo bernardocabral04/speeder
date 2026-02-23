@@ -4,6 +4,7 @@ import { useTTSEngine } from "@/hooks/useTTSEngine";
 import { usePdfDocument } from "@/hooks/usePdfDocument";
 import { useEpubDocument } from "@/hooks/useEpubDocument";
 import { updateDocument, type StoredDocument } from "@/lib/storage";
+import { type AutoSpeedConfig, getAutoSpeedConfig } from "@/lib/auto-speed";
 import { ReaderHeader } from "./ReaderHeader";
 import { ReaderControls } from "./ReaderControls";
 import { WordDisplay } from "./WordDisplay";
@@ -46,6 +47,10 @@ export function ReaderPage({ document: doc, onBack, dark, onToggleDark }: Reader
   const [epubZoom, setEpubZoom] = useState(100);
   const { pdfDoc, pdfData } = usePdfDocument(doc.hasPdfData ? doc.id : null);
   const { epubData, imageUrls } = useEpubDocument(doc.hasEpubData ? doc.id : null);
+
+  // Auto-speed state
+  const [autoSpeedConfig, setAutoSpeedConfig] = useState<AutoSpeedConfig>(getAutoSpeedConfig);
+  const wordsSinceBumpRef = useRef(0);
 
   // Split pane state
   const [splitPercent, setSplitPercent] = useState(loadSplitPercent);
@@ -117,6 +122,32 @@ export function ReaderPage({ document: doc, onBack, dark, onToggleDark }: Reader
 
   const isPlaying = tts.enabled ? tts.speaking : rsvp.playing;
   const progressPercent = Math.round(rsvp.progress * 100);
+
+  // Auto-speed: bump speed every N words
+  const prevIndexRef = useRef(rsvp.currentIndex);
+  useEffect(() => {
+    const { everyNWords, wpmBump, rateBump } = autoSpeedConfig;
+    if (!everyNWords || !isPlaying) {
+      prevIndexRef.current = rsvp.currentIndex;
+      return;
+    }
+
+    const delta = Math.abs(rsvp.currentIndex - prevIndexRef.current);
+    prevIndexRef.current = rsvp.currentIndex;
+
+    // Only count forward movement of 1-3 words (ignore seeks/jumps)
+    if (delta === 0 || delta > 3) return;
+
+    wordsSinceBumpRef.current += delta;
+    if (wordsSinceBumpRef.current >= everyNWords) {
+      wordsSinceBumpRef.current -= everyNWords;
+      if (tts.enabled) {
+        tts.setRate((r) => +(r + rateBump).toFixed(2));
+      } else {
+        rsvp.adjustWpm(wpmBump);
+      }
+    }
+  }, [rsvp.currentIndex, autoSpeedConfig, isPlaying, tts, rsvp]);
 
   // Unified play/pause
   const handleTogglePlay = useCallback(() => {
@@ -242,6 +273,7 @@ export function ReaderPage({ document: doc, onBack, dark, onToggleDark }: Reader
   // Shared controls element — rendered in left or right pane depending on collapse state
   const controlsElement = (
     <ReaderControls
+      compact={leftCollapsed}
       isPlaying={isPlaying}
       ttsLoading={tts.enabled && tts.loading}
       currentIndex={rsvp.currentIndex}
@@ -318,9 +350,9 @@ export function ReaderPage({ document: doc, onBack, dark, onToggleDark }: Reader
         <div className="absolute top-3 right-3 z-10 flex items-center rounded-full bg-muted/60 backdrop-blur-sm ring-1 ring-border">
           <button
             onClick={() => {
-              if (viewMode === "pdf") setPdfZoom((s) => Math.max(50, s - 10));
-              else if (viewMode === "epub") setEpubZoom((s) => Math.max(50, s - 10));
-              else setTextFontScale((s) => Math.max(50, s - 10));
+              if (viewMode === "pdf") setPdfZoom((s) => Math.max(20, s - 10));
+              else if (viewMode === "epub") setEpubZoom((s) => Math.max(20, s - 10));
+              else setTextFontScale((s) => Math.max(20, s - 10));
             }}
             className="px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
@@ -395,7 +427,7 @@ export function ReaderPage({ document: doc, onBack, dark, onToggleDark }: Reader
             <div className="flex-1 min-h-0 relative">
               <div className="absolute top-3 right-3 z-10 flex items-center rounded-full bg-muted/60 backdrop-blur-sm ring-1 ring-border">
                 <button
-                  onClick={() => setFontScale((s) => Math.max(50, s - 10))}
+                  onClick={() => setFontScale((s) => Math.max(20, s - 10))}
                   className="px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                 >
                   -
@@ -433,7 +465,7 @@ export function ReaderPage({ document: doc, onBack, dark, onToggleDark }: Reader
         {/* Right pane - Text / PDF / ePub view */}
         {!rightCollapsed && (
           <div
-            className="min-h-0 flex flex-col min-w-0"
+            className="min-h-0 flex flex-col min-w-0 relative"
             style={{ width: `${100 - splitPercent}%` }}
           >
             {rightContent}
@@ -447,6 +479,10 @@ export function ReaderPage({ document: doc, onBack, dark, onToggleDark }: Reader
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         onProviderChange={tts.updateProvider}
+        onAutoSpeedChange={(config) => {
+          setAutoSpeedConfig(config);
+          wordsSinceBumpRef.current = 0;
+        }}
       />
     </div>
   );
