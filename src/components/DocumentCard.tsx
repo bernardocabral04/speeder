@@ -24,6 +24,11 @@ export function DocumentCard({ doc, onOpen, onDelete }: DocumentCardProps) {
 
   return (
     <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData("application/x-document-id", doc.id);
+        e.dataTransfer.effectAllowed = "move";
+      }}
       onClick={() => onOpen(doc.id)}
       className="group relative rounded-xl ring-1 ring-border bg-card p-4 cursor-pointer hover:ring-primary/40 hover:bg-muted/30 transition-all duration-200"
     >

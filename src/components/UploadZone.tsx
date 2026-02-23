@@ -20,6 +20,7 @@ export function UploadZone({ onFileSelect, loading }: UploadZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("application/x-document-id")) return;
     e.preventDefault();
     setDragging(true);
   }, []);
@@ -33,6 +34,7 @@ export function UploadZone({ onFileSelect, loading }: UploadZoneProps) {
     (e: React.DragEvent) => {
       e.preventDefault();
       setDragging(false);
+      if (e.dataTransfer.getData("application/x-document-id")) return;
       const file = e.dataTransfer.files[0];
       if (file && isAcceptedFile(file)) {
         onFileSelect(file);

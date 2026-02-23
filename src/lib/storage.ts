@@ -1,5 +1,12 @@
 const STORAGE_KEY = "speed-reader-documents";
 const PROGRESS_PREFIX = "speed-reader-progress:";
+const FOLDERS_KEY = "speed-reader-folders";
+
+export interface Folder {
+  id: string;
+  name: string;
+  createdAt: number;
+}
 
 export interface StoredDocument {
   id: string;
@@ -12,6 +19,7 @@ export interface StoredDocument {
   createdAt: number;
   hasPdfData?: boolean;
   hasEpubData?: boolean;
+  folderId?: string;
 }
 
 function generateId(): string {
@@ -55,7 +63,7 @@ export function getDocument(id: string): StoredDocument | null {
 export function saveDocument(
   filename: string,
   text: string,
-  opts?: { hasPdfData?: boolean; hasEpubData?: boolean }
+  opts?: { hasPdfData?: boolean; hasEpubData?: boolean; folderId?: string }
 ): StoredDocument {
   const docs = getAllDocuments();
   const words = text.split(/\s+/).filter(Boolean);
@@ -70,6 +78,7 @@ export function saveDocument(
     createdAt: Date.now(),
     ...(opts?.hasPdfData ? { hasPdfData: true } : {}),
     ...(opts?.hasEpubData ? { hasEpubData: true } : {}),
+    ...(opts?.folderId ? { folderId: opts.folderId } : {}),
   };
   docs.unshift(doc);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(docs));
@@ -101,4 +110,56 @@ export function deleteDocument(id: string): void {
 export function getCompletionPercentage(doc: StoredDocument): number {
   if (doc.wordCount === 0) return 0;
   return Math.round((doc.currentWordIndex / doc.wordCount) * 100);
+}
+
+// ---------- Folder CRUD ----------
+
+export function getAllFolders(): Folder[] {
+  try {
+    const raw = localStorage.getItem(FOLDERS_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as Folder[];
+  } catch {
+    return [];
+  }
+}
+
+export function createFolder(name: string): Folder {
+  const folders = getAllFolders();
+  const folder: Folder = { id: generateId(), name, createdAt: Date.now() };
+  folders.unshift(folder);
+  localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders));
+  return folder;
+}
+
+export function renameFolder(id: string, name: string): void {
+  const folders = getAllFolders();
+  const idx = folders.findIndex((f) => f.id === id);
+  if (idx === -1) return;
+  folders[idx] = { ...folders[idx], name };
+  localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders));
+}
+
+export function deleteFolder(id: string): void {
+  const folders = getAllFolders().filter((f) => f.id !== id);
+  localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders));
+  // Move documents back to root
+  const docs = getAllDocuments();
+  const updated = docs.map((d) =>
+    d.folderId === id ? { ...d, folderId: undefined } : d
+  );
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+}
+
+export function moveDocumentToFolder(
+  docId: string,
+  folderId: string | null
+): void {
+  const docs = getAllDocuments();
+  const updated = docs.map((d) =>
+    d.id === docId
+      ? { ...d, folderId: folderId ?? undefined }
+      : d
+  );
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
 }
